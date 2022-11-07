@@ -1,0 +1,136 @@
+using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using static System.Net.WebRequestMethods;
+using File = System.IO.File;
+using System.Reflection.Metadata;
+
+// Compute Self Diffusivity of Ions -Cation and Anion(window size based)- From lammps Output
+//By Ravi C- 
+//Version 0.0
+
+namespace IonCond_i
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            string input = Path.Combine(Environment.CurrentDirectory, "salt.dump");
+            Console.WriteLine("Started");
+            int time0, ngas, nconfig, config = 0, nions, q=1;
+            double dx, dy, dz, MSD, winMSD, ri,r;
+            string line;
+            string[] data;
+            string ofile = "ION_MSD_Self.txt";
+
+            if (File.Exists(input))
+            {
+                int nlines = File.ReadLines(input).Count();
+                Console.WriteLine(nlines);
+
+                StreamReader file = new StreamReader(input);
+                StreamWriter Ofile = new StreamWriter(ofile);
+
+                line = file.ReadLine();
+                data = file.ReadLine().Split(null as string[], StringSplitOptions.RemoveEmptyEntries);
+                time0 = Convert.ToInt32(data[0]);
+
+                for (int i = 1; i < 3; i++)
+                {
+                    data = file.ReadLine().Split(null as string[], StringSplitOptions.RemoveEmptyEntries);
+                }
+                ngas = Convert.ToInt32(data[0]);
+                nions = ngas / 2;
+                nconfig = nlines / (ngas + 9);
+                Console.WriteLine(nconfig);
+                int[] time = new int[nconfig];
+                double[,] x = new double[nconfig, ngas];
+                double[,] y = new double[nconfig, ngas];
+                double[,] z = new double[nconfig, ngas];
+                time[0] = 0;
+
+                for (int j = 1; j < 6; j++)
+                {
+                    file.ReadLine();
+                }
+
+                // Input : id  mol  type    x    y    z   ix   iy   iz    xu   yu   zu 
+                //          0   1    2      3    4    5   6     7    8    9   10   11
+                for (int k = 0; k < ngas; k++)
+                {
+                    data = file.ReadLine().Split(null as string[], StringSplitOptions.RemoveEmptyEntries);
+                    x[0, k] = Convert.ToDouble(data[9]);  // x
+                    y[0, k] = Convert.ToDouble(data[10]);  // y
+                    z[0, k] = Convert.ToDouble(data[11]);  // z
+
+                }
+
+                while (file.ReadLine() != null)
+                {
+                    config += 1;
+                    data = file.ReadLine().Split(null as string[], StringSplitOptions.RemoveEmptyEntries);
+                    time[config] = Convert.ToInt32(data[0]) - time0;
+
+                    //skip the first 8 lines
+
+                    for (int l = 1; l < 8; l++)
+                    {
+                        file.ReadLine();
+                    }
+                    // Input : id  mol  type   q    x    y    z   ix   iy   iz    xu   yu   zu 
+                    //          0   1    2     3    4    5    6   7     8    9    10  11  12
+                    for (int k = 0; k < ngas; k++)
+                    {
+                        data = file.ReadLine().Split(null as string[], StringSplitOptions.RemoveEmptyEntries);
+                        x[config, k] = Convert.ToDouble(data[9]);   // x
+                        y[config, k] = Convert.ToDouble(data[10]);   // y
+                        z[config, k] = Convert.ToDouble(data[11]);   // z
+                    }
+
+                }
+                file.Close();
+
+                // reading file is done.
+
+                //computing Green-Kubo - 
+
+
+                for (int tk = 0; tk < (nconfig / 2); tk++) // time 
+
+                {
+                    winMSD = 0.0;
+
+                    for (int ws = 0; ws < (nconfig - tk); ws++) //window size stuff
+                    {
+                        r = 0.0;
+                        for (int ik = 0; ik < ngas; ik++)
+                        {
+                            dx = x[ws + tk, ik] - x[ws, ik];
+                            dy = y[ws + tk, ik] - y[ws, ik];
+                            dz = z[ws + tk, ik] - z[ws, ik];
+
+                            ri = Math.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
+
+                            if (ik < nions) q = 1;
+                            else q = -1;
+
+                            r += (q * ri);
+                        }
+                        MSD =  (r*r);
+
+                        winMSD += MSD;
+                    }
+                    winMSD /= (nconfig - tk);
+
+                    string OUTS0 = time[tk] + "  " + winMSD;
+                    Ofile.WriteLine(OUTS0);
+
+                }
+                Ofile.Close();
+
+            }
+        }
+    }
+}
